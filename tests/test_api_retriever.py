@@ -1,6 +1,7 @@
-from hdx.scraper.copernicus.ems.api_retriever import APIRetriever
 from hdx.utilities.downloader import Download
 from hdx.utilities.retriever import Retrieve
+
+from hdx.scraper.copernicus.ems.api_retriever import APIRetriever
 
 
 class TestAPIRetriever:

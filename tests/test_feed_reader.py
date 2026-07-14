@@ -1,7 +1,8 @@
-from hdx.scraper.copernicus.ems.feed_reader import FeedReader
 from hdx.utilities.dateparse import default_date, parse_date
 from hdx.utilities.downloader import Download
 from hdx.utilities.retriever import Retrieve
+
+from hdx.scraper.copernicus.ems.feed_reader import FeedReader
 
 
 class TestFeedReader:

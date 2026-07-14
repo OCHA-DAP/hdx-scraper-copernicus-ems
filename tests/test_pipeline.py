@@ -21,7 +21,9 @@ class TestPipeline:
         results = pipeline.generate_datasets()
 
         assert len(results) == 2
-        datasets_by_name = {dataset["name"]: (dataset, showcase) for dataset, showcase in results}
+        datasets_by_name = {
+            dataset["name"]: (dataset, showcase) for dataset, showcase in results
+        }
 
         dataset, showcase = datasets_by_name["copernicus-ems-emsr884"]
         dataset.update_from_yaml(path=join(config_dir, "hdx_dataset_static.yaml"))
@@ -31,7 +33,10 @@ class TestPipeline:
         assert dataset.get_tags() == ["earthquake-tsunami", "geodata"]
         assert dataset.get_location_iso3s() == ["VEN"]
         assert dataset.get_resources()[0]["name"] == "EMSR884_products.zip"
-        assert showcase["url"] == "https://storymaps.arcgis.com/stories/717d0c07ec434b54ab6b2e0bbd7bc9f6"
+        assert (
+            showcase["url"]
+            == "https://storymaps.arcgis.com/stories/717d0c07ec434b54ab6b2e0bbd7bc9f6"
+        )
 
         dataset, showcase = datasets_by_name["copernicus-ems-emsr838"]
         assert dataset["title"] == "Flood in Pakistan (EMSR838)"
@@ -39,7 +44,9 @@ class TestPipeline:
         assert dataset.get_location_iso3s() == ["PAK"]
 
     def test_skips_sensitive_activation(self, configuration, input_dir):
-        detail = _load_activation(input_dir, "EMSR884", join(input_dir, "emsr884_products.zip"))
+        detail = _load_activation(
+            input_dir, "EMSR884", join(input_dir, "emsr884_products.zip")
+        )
         detail["detail"]["sensitive"] = True
         pipeline = Pipeline(configuration, {"EMSR884": detail})
         assert pipeline.generate_datasets() == []

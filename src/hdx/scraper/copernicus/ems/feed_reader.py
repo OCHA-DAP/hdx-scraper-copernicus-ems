@@ -41,7 +41,9 @@ class FeedReader:
             published = parse_date(entry.published)
             if published <= previous_build_date:
                 continue
-            match = _CODE_PATTERN.search(f"{entry.title} {entry.description} {entry.link}")
+            match = _CODE_PATTERN.search(
+                f"{entry.title} {entry.description} {entry.link}"
+            )
             if not match:
                 logger.info(f"Skipping feed item with no EMSR code: {entry.title}")
                 continue

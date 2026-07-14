@@ -12,10 +12,6 @@ from hdx.api.configuration import Configuration
 from hdx.api.utilities.hdx_state import HDXState
 from hdx.data.user import User
 from hdx.facades.infer_arguments import facade
-from hdx.scraper.copernicus.ems._version import __version__
-from hdx.scraper.copernicus.ems.api_retriever import APIRetriever
-from hdx.scraper.copernicus.ems.feed_reader import FeedReader
-from hdx.scraper.copernicus.ems.pipeline import Pipeline
 from hdx.utilities.dateparse import default_date, iso_string_from_datetime, parse_date
 from hdx.utilities.downloader import Download
 from hdx.utilities.path import (
@@ -23,6 +19,11 @@ from hdx.utilities.path import (
     wheretostart_tempdir_batch,
 )
 from hdx.utilities.retriever import Retrieve
+
+from hdx.scraper.copernicus.ems._version import __version__
+from hdx.scraper.copernicus.ems.api_retriever import APIRetriever
+from hdx.scraper.copernicus.ems.feed_reader import FeedReader
+from hdx.scraper.copernicus.ems.pipeline import Pipeline
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,7 @@ def main(
 if __name__ == "__main__":
     facade(
         main,
-#        hdx_site="dev",
+        #        hdx_site="dev",
         user_agent_config_yaml=join(expanduser("~"), ".useragents.yaml"),
         user_agent_lookup=_LOOKUP,
         project_config_yaml=script_dir_plus_file(

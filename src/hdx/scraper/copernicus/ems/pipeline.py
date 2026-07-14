@@ -94,10 +94,16 @@ class Pipeline:
         resource = Resource(
             {
                 "name": f"{code}_products.zip",
-                "description": f"All Rapid Mapping products for activation {code} ({activation_name})",
+                "description": (
+                    f"All Rapid Mapping products for activation {code} ({activation_name}), "
+                    "zipped: primarily GeoTIFF rasters, may also include vector tile/style files"
+                ),
             }
         )
-        resource.set_format("zip")
+        # HDX has no generic "zip" format; every zip synonym maps to a specific content
+        # type. GeoTIFF is the closest fit since raster imagery is the dominant content,
+        # though the archive can also contain vt/sld/json layer files - see description.
+        resource.set_format("zipped geotiff")
         resource.set_file_to_upload(zip_path)
         dataset.add_update_resource(resource)
 
