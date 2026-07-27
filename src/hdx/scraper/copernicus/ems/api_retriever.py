@@ -5,6 +5,7 @@ Rapid Mapping JSON API, for activation codes discovered via the RSS feed."""
 import logging
 
 from hdx.api.configuration import Configuration
+from hdx.utilities.base_downloader import DownloadError
 from hdx.utilities.retriever import Retrieve
 
 logger = logging.getLogger(__name__)
@@ -30,13 +31,17 @@ class APIRetriever:
             detail = results[0]
 
             products_path = detail.get("productsPath")
-            zip_path = None
             if products_path:
-                zip_path = self._retriever.download_file(
-                    products_path, filename=f"{code.lower()}_products.zip"
-                )
+                try:
+                    zip_path = self._retriever.download_file(
+                        products_path, filename=f"{code.lower()}_products.zip"
+                    )
+                except DownloadError:
+                    logger.warning(f"{code}: no products archive available")
+                    continue
             else:
                 logger.warning(f"{code}: no products archive available")
+                continue
 
             activations[code] = {"detail": detail, "zip_path": zip_path}
         return activations
