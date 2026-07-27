@@ -91,8 +91,9 @@ def describe_product_types(paths: list) -> str:
         for product_type in ("DEL", "GRA", "FEP")
         if product_type in types_present
     ]
-    return "\n\n**Product types present in this dataset's resources:**  \n" + "  \n".join(
-        lines
+    return (
+        "\n\n**Product types present in this dataset's resources:**  \n"
+        + "  \n".join(lines)
     )
 
 
@@ -223,9 +224,7 @@ def _materialize_groups(raw_paths: list, output_dir_path: Path) -> list:
             continue
         if _SHAPEFILE_EXT in members:
             geojson_path = members.pop(_GEOJSON_EXT, None)
-            extracted.append(
-                _bundle_shapefile(members, output_dir_path)
-            )
+            extracted.append(_bundle_shapefile(members, output_dir_path))
             if geojson_path is not None:
                 extracted.append(_move_into(geojson_path, output_dir_path))
         else:

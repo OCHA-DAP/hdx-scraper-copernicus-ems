@@ -61,9 +61,7 @@ class TestProductExtractor:
         output_dir = tmp_path / "out"
         extracted = extract_product_files(str(zip_path), str(output_dir))
 
-        names_to_content = {
-            basename(p): Path(p).read_bytes() for p in extracted
-        }
+        names_to_content = {basename(p): Path(p).read_bytes() for p in extracted}
         assert names_to_content == {
             "a.tif": b"first",
             "a__dup2.tif": b"second-but-longer",
