@@ -263,31 +263,41 @@ def _extract_flat(
     return dest
 
 
+def _dedup_occurrence(seen: dict, key, fingerprint):
+    """Returns the occurrence index (0 for the first time this key is seen,
+    1+ for a genuinely different repeat that needs disambiguating), or None
+    if fingerprint is a byte-identical repeat of an already-processed
+    occurrence of key (some real archives contain such artifacts, safe to
+    collapse to one)."""
+    prior_fingerprints = seen.setdefault(key, [])
+    if fingerprint in prior_fingerprints:
+        return None
+    index = len(prior_fingerprints)
+    prior_fingerprints.append(fingerprint)
+    return index
+
+
 def _resolve_name(seen: dict, name: str, crc: int, size: int):
     """Returns the filename this entry should be extracted under, or None if
-    it's a byte-identical duplicate of an already-processed entry (some real
-    archives contain such artifacts, safe to collapse to one).
+    it's a byte-identical duplicate of an already-processed entry.
 
     Some archives also reuse the same filename for genuinely different
     content (observed in real Copernicus EMS archives). Those must not be
     dropped: they're disambiguated with a "__dup<n>" suffix so every distinct
     file still ends up as its own resource.
     """
-    key = (crc, size)
-    prior_keys = seen.setdefault(name, [])
-    if key in prior_keys:
+    index = _dedup_occurrence(seen, name, (crc, size))
+    if index is None:
         logger.info(f"Duplicate entry {name!r} in archive, skipping repeat")
         return None
-    if prior_keys:
-        stem_path = Path(name)
-        resolved_name = f"{stem_path.stem}__dup{len(prior_keys) + 1}{stem_path.suffix}"
-        logger.warning(
-            f"Entry {name!r} reused for different content; keeping both, this "
-            f"occurrence extracted as {resolved_name!r}"
-        )
-    else:
-        resolved_name = name
-    prior_keys.append(key)
+    if index == 0:
+        return name
+    stem_path = Path(name)
+    resolved_name = f"{stem_path.stem}__dup{index + 1}{stem_path.suffix}"
+    logger.warning(
+        f"Entry {name!r} reused for different content; keeping both, this "
+        f"occurrence extracted as {resolved_name!r}"
+    )
     return resolved_name
 
 
@@ -306,23 +316,22 @@ def _resolve_group_names(seen_groups: dict, stem: str, infos: list):
     fingerprint = tuple(
         sorted((Path(info.filename).name, info.CRC, info.file_size) for info in infos)
     )
-    prior_fingerprints = seen_groups.setdefault(stem, [])
-    if fingerprint in prior_fingerprints:
+    index = _dedup_occurrence(seen_groups, stem, fingerprint)
+    if index is None:
         logger.info(
             f"Duplicate entry group for {stem!r} ({len(infos)} file(s)) in "
             "archive, skipping repeat"
         )
         return None
-    if prior_fingerprints:
-        suffix = f"__dup{len(prior_fingerprints) + 1}"
+    if index == 0:
+        suffix = ""
+    else:
+        suffix = f"__dup{index + 1}"
         names = sorted(Path(info.filename).name for info in infos)
         logger.warning(
             f"Entry group for {stem!r} reused for different content; keeping "
             f"both, this occurrence extracted with suffix {suffix!r} ({names})"
         )
-    else:
-        suffix = ""
-    prior_fingerprints.append(fingerprint)
 
     resolved = []
     for info in infos:
@@ -337,9 +346,10 @@ def _materialize_groups(raw_paths: list, output_dir_path: Path) -> list:
     for path in raw_paths:
         groups.setdefault(path.stem, {})[path.suffix.lower()] = path
 
+    parsed_types = {stem: _parse_product_type(stem) for stem in groups}
+
     aoi_accurate_types = {}
-    for stem in groups:
-        aoi, product_type, _ = _parse_product_type(stem)
+    for aoi, product_type, _ in parsed_types.values():
         if aoi and product_type in _MORE_ACCURATE_TYPES:
             aoi_accurate_types.setdefault(aoi, set()).add(product_type)
 
@@ -347,7 +357,7 @@ def _materialize_groups(raw_paths: list, output_dir_path: Path) -> list:
     for stem, members in groups.items():
         if _is_skipped_layer(stem):
             continue
-        aoi, product_type, _ = _parse_product_type(stem)
+        aoi, product_type, _ = parsed_types[stem]
         if product_type == "FEP" and aoi_accurate_types.get(aoi):
             logger.info(
                 f"Skipping FEP product {stem!r}: more accurate "

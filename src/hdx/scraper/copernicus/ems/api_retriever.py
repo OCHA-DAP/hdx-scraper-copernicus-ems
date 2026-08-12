@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 class APIRetriever:
     def __init__(self, configuration: Configuration, retriever: Retrieve):
-        self._configuration = configuration
         self._retriever = retriever
         self._detail_base_url = configuration["detail_base_url"]
 
@@ -30,6 +29,7 @@ class APIRetriever:
                 continue
             detail = results[0]
 
+            zip_path = None
             products_path = detail.get("productsPath")
             if products_path:
                 try:
@@ -37,9 +37,8 @@ class APIRetriever:
                         products_path, filename=f"{code.lower()}_products.zip"
                     )
                 except DownloadError:
-                    logger.warning(f"{code}: no products archive available")
-                    continue
-            else:
+                    pass
+            if not zip_path:
                 logger.warning(f"{code}: no products archive available")
                 continue
 

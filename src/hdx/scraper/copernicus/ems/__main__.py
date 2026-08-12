@@ -50,14 +50,8 @@ def main(
 
     with wheretostart_tempdir_batch(folder=_LOOKUP) as info:
         tempdir = info["folder"]
-        # with HDXState(
-        #     "pipeline-state-copernicus-ems",
-        #     tempdir,
-        #     parse_date,
-        #     iso_string_from_datetime,
-        #     configuration,
-        # ) as state:
-        #     previous_build_date = state.get() or default_date
+        # TODO: wire up HDXState for incremental runs; every run currently
+        # does a full scan from default_date.
         previous_build_date = default_date
         with Download() as downloader:
             retriever = Retrieve(
@@ -69,7 +63,7 @@ def main(
                 use_saved=use_saved,
             )
             feed_reader = FeedReader(configuration, retriever)
-            last_build_date, new_codes = feed_reader.get_new_codes(previous_build_date)
+            _, new_codes = feed_reader.get_new_codes(previous_build_date)
 
             api_retriever = APIRetriever(configuration, retriever)
             activations = api_retriever.process(new_codes)
@@ -90,7 +84,6 @@ def main(
                 if showcase:
                     showcase.create_in_hdx()
                     showcase.add_dataset(dataset)
-            # state.set(last_build_date)
 
 
 if __name__ == "__main__":

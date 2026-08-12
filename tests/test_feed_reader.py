@@ -1,23 +1,12 @@
 from hdx.utilities.dateparse import default_date, parse_date
-from hdx.utilities.downloader import Download
-from hdx.utilities.retriever import Retrieve
 
 from hdx.scraper.copernicus.ems.feed_reader import FeedReader
 
 
 class TestFeedReader:
-    def test_get_new_codes_from_scratch(self, configuration, input_dir, tmp_path):
-        with Download(user_agent="test") as downloader:
-            retriever = Retrieve(
-                downloader=downloader,
-                fallback_dir=str(tmp_path),
-                saved_dir=input_dir,
-                temp_dir=str(tmp_path),
-                save=False,
-                use_saved=True,
-            )
-            feed_reader = FeedReader(configuration, retriever)
-            last_build_date, codes = feed_reader.get_new_codes(default_date)
+    def test_get_new_codes_from_scratch(self, configuration, retriever):
+        feed_reader = FeedReader(configuration, retriever)
+        last_build_date, codes = feed_reader.get_new_codes(default_date)
 
         assert last_build_date == parse_date("2026-07-13")
         # Two of the ten feed items are not activations and have no EMSR code
@@ -32,17 +21,8 @@ class TestFeedReader:
             "EMSR886",
         ]
 
-    def test_get_new_codes_already_up_to_date(self, configuration, input_dir, tmp_path):
-        with Download(user_agent="test") as downloader:
-            retriever = Retrieve(
-                downloader=downloader,
-                fallback_dir=str(tmp_path),
-                saved_dir=input_dir,
-                temp_dir=str(tmp_path),
-                save=False,
-                use_saved=True,
-            )
-            feed_reader = FeedReader(configuration, retriever)
-            last_build_date, codes = feed_reader.get_new_codes(parse_date("2026-07-13"))
+    def test_get_new_codes_already_up_to_date(self, configuration, retriever):
+        feed_reader = FeedReader(configuration, retriever)
+        last_build_date, codes = feed_reader.get_new_codes(parse_date("2026-07-13"))
 
         assert codes == []

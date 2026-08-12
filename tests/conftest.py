@@ -5,6 +5,8 @@ from hdx.api.configuration import Configuration
 from hdx.api.locations import Locations
 from hdx.data.vocabulary import Vocabulary
 from hdx.location.country import Country
+from hdx.utilities.downloader import Download
+from hdx.utilities.retriever import Retrieve
 from hdx.utilities.useragent import UserAgent
 
 
@@ -54,3 +56,16 @@ def configuration(config_dir):
         "name": "approved",
     }
     return Configuration.read()
+
+
+@pytest.fixture
+def retriever(input_dir, tmp_path):
+    with Download(user_agent="test") as downloader:
+        yield Retrieve(
+            downloader=downloader,
+            fallback_dir=str(tmp_path),
+            saved_dir=input_dir,
+            temp_dir=str(tmp_path),
+            save=False,
+            use_saved=True,
+        )

@@ -2,6 +2,7 @@
 """Copernicus EMS Rapid Mapping scraper"""
 
 import logging
+from functools import lru_cache
 from os.path import basename, join
 from pathlib import Path
 
@@ -23,6 +24,11 @@ from hdx.scraper.copernicus.ems.product_extractor import (
 logger = logging.getLogger(__name__)
 
 
+@lru_cache
+def _get_iso3_country_code_fuzzy(name: str):
+    return Country.get_iso3_country_code_fuzzy(name)
+
+
 def _latest_delivery_time(detail: dict):
     """Returns the latest deliveryTime among a detail's actually-delivered
     (statusCode "F") products, or None if there are none (eg. all products
@@ -41,7 +47,6 @@ def _latest_delivery_time(detail: dict):
 
 class Pipeline:
     def __init__(self, configuration: Configuration, activations: dict, temp_dir: str):
-        self._configuration = configuration
         self._activations = activations
         self._temp_dir = temp_dir
         self._tag_mapping = configuration.get("tag_mapping", {})
@@ -79,7 +84,7 @@ class Pipeline:
 
         matched_countries = []
         for country in countries:
-            iso3, _ = Country.get_iso3_country_code_fuzzy(country["name"])
+            iso3, _ = _get_iso3_country_code_fuzzy(country["name"])
             if not iso3:
                 logger.warning(f"{code}: couldn't match country {country['name']!r}")
                 continue

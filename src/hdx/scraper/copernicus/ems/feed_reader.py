@@ -22,7 +22,6 @@ _CODE_PATTERN = re.compile(r"EMSR\d+", re.IGNORECASE)
 
 class FeedReader:
     def __init__(self, configuration: Configuration, retriever: Retrieve):
-        self._configuration = configuration
         self._retriever = retriever
         self._feed_url = configuration["feed_url"]
 
