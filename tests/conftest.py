@@ -44,7 +44,10 @@ def configuration(config_dir):
             for tag in (
                 "earthquake-tsunami",
                 "flooding",
+                "fire",
                 "geodata",
+                "natural disasters",
+                "hazards and risk",
             )
         ],
         "id": "b891512e-9516-4bf5-962a-7a289772a2a1",

@@ -16,10 +16,27 @@ from slugify import slugify
 
 from hdx.scraper.copernicus.ems.product_extractor import (
     describe_product_types,
+    describe_resource,
     extract_product_files,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _latest_delivery_time(detail: dict):
+    """Returns the latest deliveryTime among a detail's actually-delivered
+    (statusCode "F") products, or None if there are none (eg. all products
+    are still pending ("W") or were cancelled ("N"))."""
+    delivery_times = [
+        product["version"]["deliveryTime"]
+        for aoi in detail.get("aois") or []
+        for product in aoi.get("products") or []
+        if product.get("version", {}).get("statusCode") == "F"
+        and product.get("version", {}).get("deliveryTime")
+    ]
+    if not delivery_times:
+        return None
+    return max(parse_date(dt) for dt in delivery_times)
 
 
 class Pipeline:
@@ -28,6 +45,7 @@ class Pipeline:
         self._activations = activations
         self._temp_dir = temp_dir
         self._tag_mapping = configuration.get("tag_mapping", {})
+        self._common_tags = configuration.get("common_tags", [])
         self._unmapped_categories = set()
 
     def generate_datasets(self) -> list:
@@ -110,9 +128,10 @@ class Pipeline:
             f"{detail.get('reason', '')}{gdacs_note}{citation_note}"
         )
 
-        tags = list(self._tag_mapping.get(category, []))
-        if category and not tags:
+        category_tags = list(self._tag_mapping.get(category, []))
+        if category and not category_tags:
             self._unmapped_categories.add(category)
+        tags = list(dict.fromkeys(self._common_tags + category_tags))
         if tags:
             dataset.add_tags(tags)
 
@@ -130,7 +149,9 @@ class Pipeline:
 
         event_time = detail.get("eventTime")
         if event_time:
-            dataset.set_time_period(parse_date(event_time))
+            start_date = parse_date(event_time)
+            end_date = _latest_delivery_time(detail) or start_date
+            dataset.set_time_period(start_date, end_date)
 
         extracted_paths = extract_product_files(zip_path, join(self._temp_dir, code))
         if not extracted_paths:
@@ -150,10 +171,7 @@ class Pipeline:
             resource = Resource(
                 {
                     "name": resource_name,
-                    "description": (
-                        f"Rapid Mapping product file for activation {code} "
-                        f"({activation_name}): {resource_name}"
-                    ),
+                    "description": describe_resource(path, code, activation_name),
                 }
             )
             ext = Path(path).suffix.lower()

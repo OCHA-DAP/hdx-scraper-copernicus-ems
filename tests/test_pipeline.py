@@ -1,7 +1,9 @@
 import json
 from os.path import join
 
-from hdx.scraper.copernicus.ems.pipeline import Pipeline
+from hdx.utilities.dateparse import parse_date
+
+from hdx.scraper.copernicus.ems.pipeline import Pipeline, _latest_delivery_time
 
 
 def _load_activation(input_dir, code, zip_path):
@@ -30,12 +32,25 @@ class TestPipeline:
         assert dataset["title"] == "Venezuela - Earthquake (EMSR884)"
         assert "EMSR884" in dataset["notes"]
         assert "GDACS ID: EQ1548377" in dataset["notes"]
-        assert dataset.get_tags() == ["earthquake-tsunami", "geodata"]
+        assert set(dataset.get_tags()) == {
+            "natural disasters",
+            "hazards and risk",
+            "earthquake-tsunami",
+            "geodata",
+        }
         assert dataset.get_location_iso3s() == ["VEN"]
+        time_period = dataset.get_time_period()
+        assert time_period["startdate"].date() == parse_date("2026-06-24").date()
+        assert time_period["enddate"].date() == parse_date("2026-07-06").date()
         resources = dataset.get_resources()
         assert len(resources) == 1
-        assert resources[0]["name"] == "EMSR884_AOI00_GRM_PRODUCT_v1.tif"
+        assert resources[0]["name"] == "EMSR884_AOI00_GRA_PRODUCT_v1.tif"
         assert resources[0].get_format() == "geotiff"
+        assert resources[0]["description"] == (
+            "GeoTIFF containing the grading (damage assessment) map for Area "
+            "of Interest 0 of the Earthquake in Venezuela (EMSR884), from the "
+            "initial delivery."
+        )
         assert (
             showcase["url"]
             == "https://storymaps.arcgis.com/stories/717d0c07ec434b54ab6b2e0bbd7bc9f6"
@@ -43,8 +58,16 @@ class TestPipeline:
 
         dataset, showcase = datasets_by_name["pak-flood-emsr838"]
         assert dataset["title"] == "Pakistan - Flood (EMSR838)"
-        assert dataset.get_tags() == ["flooding", "geodata"]
+        assert set(dataset.get_tags()) == {
+            "natural disasters",
+            "hazards and risk",
+            "flooding",
+            "geodata",
+        }
         assert dataset.get_location_iso3s() == ["PAK"]
+        time_period = dataset.get_time_period()
+        assert time_period["startdate"].date() == parse_date("2025-08-29").date()
+        assert time_period["enddate"].date() == parse_date("2025-09-11").date()
 
     def test_generate_dataset_explodes_nested_products(
         self, configuration, input_dir, tmp_path
@@ -83,6 +106,28 @@ class TestPipeline:
             resources_by_name[f"{stem}_observedEventA_v1.json"].get_format()
             == "geojson"
         )
+        assert resources_by_name[f"{stem}_v1.gpkg"]["description"] == (
+            "GeoPackage containing the delineation (extent) map for Area of "
+            "Interest 1 of the Earthquake in Venezuela (EMSR884), from the "
+            "initial delivery."
+        )
+        assert resources_by_name[f"{stem}_observedEventA_v1.zip"]["description"] == (
+            "shapefile containing the delineation (extent) map (Observed Event "
+            "layer) for Area of Interest 1 of the Earthquake in Venezuela "
+            "(EMSR884), from the initial delivery."
+        )
+
+    def test_unmapped_category_still_gets_common_tags(
+        self, configuration, input_dir, tmp_path
+    ):
+        detail = _load_activation(
+            input_dir, "EMSR884", join(input_dir, "emsr884_products.zip")
+        )
+        detail["detail"]["category"] = "Landslide"
+        pipeline = Pipeline(configuration, {"EMSR884": detail}, str(tmp_path))
+        ((dataset, _showcase),) = pipeline.generate_datasets()
+
+        assert set(dataset.get_tags()) == {"natural disasters", "hazards and risk"}
 
     def test_skips_sensitive_activation(self, configuration, input_dir, tmp_path):
         detail = _load_activation(
@@ -96,3 +141,55 @@ class TestPipeline:
         detail = _load_activation(input_dir, "EMSR884", None)
         pipeline = Pipeline(configuration, {"EMSR884": detail}, str(tmp_path))
         assert pipeline.generate_datasets() == []
+
+
+class TestLatestDeliveryTime:
+    def test_picks_max_among_delivered_only(self):
+        detail = {
+            "aois": [
+                {
+                    "products": [
+                        {
+                            "version": {
+                                "statusCode": "F",
+                                "deliveryTime": "2025-08-30T03:01:00",
+                            }
+                        },
+                        {
+                            "version": {
+                                "statusCode": "N",
+                                "deliveryTime": "2025-09-05T00:00:00",
+                            }
+                        },
+                        {
+                            "version": {
+                                "statusCode": "W",
+                                "deliveryTime": "2025-09-06T00:00:00",
+                            }
+                        },
+                    ]
+                },
+                {
+                    "products": [
+                        {
+                            "version": {
+                                "statusCode": "F",
+                                "deliveryTime": "2025-09-01T02:27:00",
+                            }
+                        }
+                    ]
+                },
+            ]
+        }
+        assert _latest_delivery_time(detail) == parse_date("2025-09-01T02:27:00")
+
+    def test_no_delivered_products_returns_none(self):
+        detail = {
+            "aois": [
+                {"products": [{"version": {"statusCode": "W", "deliveryTime": None}}]}
+            ]
+        }
+        assert _latest_delivery_time(detail) is None
+
+    def test_no_aois_returns_none(self):
+        assert _latest_delivery_time({}) is None
