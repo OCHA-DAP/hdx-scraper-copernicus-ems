@@ -69,7 +69,7 @@ def main(
             activations = api_retriever.process(new_codes)
 
             pipeline = Pipeline(configuration, activations, tempdir)
-            for dataset, showcase in pipeline.generate_datasets():
+            for dataset, showcases in pipeline.generate_datasets():
                 dataset.update_from_yaml(
                     script_dir_plus_file(
                         join("config", "hdx_dataset_static.yaml"), main
@@ -81,7 +81,7 @@ def main(
                     updated_by_script=_UPDATED_BY_SCRIPT,
                     batch=info["batch"],
                 )
-                if showcase:
+                for showcase in showcases:
                     showcase.create_in_hdx()
                     showcase.add_dataset(dataset)
 

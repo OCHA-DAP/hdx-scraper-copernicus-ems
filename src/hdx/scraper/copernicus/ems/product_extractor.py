@@ -6,13 +6,26 @@ per-product zips (eg. EMSR887_AOI01_DEL_PRODUCT_v1.zip), each of which bundles
 several vector layers as full shapefile component sets, a GeoPackage, an
 XLSX summary table and a PDF map under a Maps/ subfolder. Every file already
 present in the archive is turned into an individually uploadable resource
-file, except for a handful of per-layer vector groups deliberately left out
-(see _SKIPPED_LAYERS below) since they're supporting/provenance content
-rather than mapped output, and FEP (First Estimate Product) files for an AOI
-that also has a more accurate DEL or GRA product (see _MORE_ACCURATE_TYPES
-below); the only files this module ever creates are zips bundling a single
-layer's shapefile sidecars together, since a lone .shp isn't openable
-without its .shx/.dbf companions.
+file, except for:
+- a handful of per-layer vector groups deliberately left out (see
+  _SKIPPED_LAYERS below) since they're supporting/provenance content rather
+  than mapped output;
+- FEP (First Estimate Product) files for an AOI that also has a more accurate
+  DEL or GRA product (see _MORE_ACCURATE_TYPES below);
+- per-layer vector groups (other than the AOI boundary) for an AOI/round that
+  also has a GeoPackage, since the GeoPackage already contains every layer
+  for that AOI/round with its official styling - shipping both would make the
+  resource list longer without adding any information, so the GeoPackage is
+  preferred and the per-layer files are only surfaced standalone when no
+  GeoPackage was delivered for that AOI/round.
+
+The AOI boundary layer (areaOfInterestA) is always kept regardless of
+GeoPackage availability - it's small, always previewable, and used to give
+the dataset a non-misleading, correctly-centred map preview.
+
+The only files this module ever creates are zips bundling a single layer's
+shapefile sidecars together, since a lone .shp isn't openable without its
+.shx/.dbf companions.
 """
 
 import logging
@@ -27,12 +40,15 @@ _SHAPEFILE_EXT = ".shp"
 _GEOJSON_EXT = ".json"
 
 # Layer/table names deliberately excluded from the exploded resource set:
-# areaOfInterestA/imageFootprintA/notAnalysedA describe the assessment itself
-# (AOI boundary, source imagery coverage, analysis gaps) rather than the
-# mapped event, and "source" is a geometry-less imagery-provenance table -
-# all supporting/provenance content rather than the core mapped output.
-_SKIPPED_LAYERS = ("areaOfInterestA", "imageFootprintA", "notAnalysedA", "source")
+# imageFootprintA/notAnalysedA describe the assessment itself (source imagery
+# coverage, analysis gaps) rather than the mapped event, and "source" is a
+# geometry-less imagery-provenance table - all supporting/provenance content
+# rather than the core mapped output. areaOfInterestA (the AOI boundary) is
+# NOT skipped - see module docstring.
+_SKIPPED_LAYERS = ("imageFootprintA", "notAnalysedA", "source")
 _SKIPPED_LAYER_RE = re.compile(rf"_(?:{'|'.join(_SKIPPED_LAYERS)})_v\d+(?:__dup\d+)?$")
+
+_AOI_BOUNDARY_LAYER = "areaOfInterestA"
 
 # Copernicus EMS product filenames encode the AOI, product type and delivery
 # round, eg. "EMSR887_AOI01_DEL_PRODUCT_v1.gpkg" (initial delivery) or
@@ -65,6 +81,15 @@ _PRODUCT_TYPE_SHORT_LABELS = {
     "FEP": "first estimate product",
 }
 
+# Filename-safe counterparts to _PRODUCT_TYPE_SHORT_LABELS/_round_label, used by
+# resource_title (which must produce a lowercase, underscore-separated name per
+# the HDX resource-naming convention rather than the human-prose labels above).
+_PRODUCT_TYPE_SLUG = {
+    "DEL": "delineation",
+    "GRA": "grading",
+    "FEP": "first_estimate",
+}
+
 _FORMAT_LABELS = {
     ".gpkg": "GeoPackage",
     ".zip": "shapefile",
@@ -76,6 +101,7 @@ _FORMAT_LABELS = {
 
 _LAYER_NAME_RE = re.compile(r"_([A-Za-z][A-Za-z0-9]*)_v\d+(?:__dup\d+)?$")
 _HUMANIZE_RE = re.compile(r"(?<!^)(?=[A-Z])")
+_DUP_SUFFIX_RE = re.compile(r"__dup(\d+)$")
 
 
 def _is_skipped_layer(stem: str) -> bool:
@@ -96,8 +122,66 @@ def _round_label(round_token: str) -> str:
     return f"monitoring round {monit_match.group(1)}"
 
 
+def _round_slug(round_token: str) -> str:
+    """Filename-safe counterpart to _round_label, eg. "initial" or
+    "monitoring1"."""
+    if round_token == "PRODUCT":
+        return "initial"
+    monit_match = re.fullmatch(r"MONIT0*(\d+)", round_token)
+    return f"monitoring{monit_match.group(1)}"
+
+
+def round_sort_key(round_token: str) -> int:
+    """Returns an integer sort key for a delivery round token, ordering the
+    initial delivery ("PRODUCT") before "MONIT01", "MONIT01" before
+    "MONIT02", etc, so resources can be listed in chronological delivery
+    order.
+
+    Args:
+        round_token: Round token, eg. "PRODUCT" or "MONIT01"
+
+    Returns:
+        Sort key, lower sorts earlier
+    """
+    if round_token == "PRODUCT":
+        return 0
+    monit_match = re.fullmatch(r"MONIT0*(\d+)", round_token)
+    return int(monit_match.group(1))
+
+
+def parse_product_type(path: str):
+    """Returns the (aoi, product_type, round_token) parsed from path's
+    filename, or (None, None, None) if it doesn't match the expected
+    Copernicus EMS naming pattern.
+
+    Args:
+        path: Resource path
+
+    Returns:
+        (aoi, product_type, round_token) tuple, eg. ("AOI01", "DEL", "PRODUCT")
+    """
+    return _parse_product_type(Path(path).stem)
+
+
 def _format_label(path: str) -> str:
     return _FORMAT_LABELS.get(Path(path).suffix.lower(), Path(path).suffix.lstrip("."))
+
+
+def _layer_name(stem: str, aoi: str, product_type: str, round_token: str):
+    """Returns the raw layer-name segment of a per-layer resource's stem
+    (eg. "areaOfInterestA"), or None if stem is a whole-AOI/round file (eg.
+    the single GeoPackage/spreadsheet/PDF covering the whole delivery)."""
+    prefix = f"_{aoi}_{product_type}_{round_token}"
+    remainder = stem[stem.index(prefix) + len(prefix) :]
+    match = _LAYER_NAME_RE.search(remainder)
+    return match.group(1) if match else None
+
+
+def _layer_slug(layer_name: str) -> str:
+    """Filename-safe counterpart to _layer_fragment's humanized name, eg.
+    "areaOfInterestA" -> "area_of_interest"."""
+    humanized_name = layer_name.rstrip("A") or layer_name
+    return _HUMANIZE_RE.sub("_", humanized_name).lower()
 
 
 def _layer_fragment(stem: str, aoi: str, product_type: str, round_token: str) -> str:
@@ -105,13 +189,11 @@ def _layer_fragment(stem: str, aoi: str, product_type: str, round_token: str) ->
     per-layer resource (shapefile zip / standalone geojson) contains, eg.
     " (Observed Event layer)", or "" if the stem is a whole-AOI/round file
     (eg. the single GeoPackage/spreadsheet/PDF covering the whole delivery)."""
-    prefix = f"_{aoi}_{product_type}_{round_token}"
-    remainder = stem[stem.index(prefix) + len(prefix) :]
-    match = _LAYER_NAME_RE.search(remainder)
-    if not match:
+    layer_name = _layer_name(stem, aoi, product_type, round_token)
+    if layer_name is None:
         return ""
-    layer_name = match.group(1).rstrip("A") or match.group(1)
-    humanized = _HUMANIZE_RE.sub(" ", layer_name).title()
+    humanized_name = layer_name.rstrip("A") or layer_name
+    humanized = _HUMANIZE_RE.sub(" ", humanized_name).title()
     return f" ({humanized} layer)"
 
 
@@ -152,6 +234,53 @@ def describe_resource(path: str, code: str, activation_name: str) -> str:
     )
 
 
+def resource_title(path: str, resource_prefix: str) -> str:
+    """Returns a lowercase, underscore-separated name for a single extracted
+    resource file, for use as the HDX resource's name - per HDX convention,
+    this doubles as the resource's filename, and is used as such (the raw
+    Copernicus EMS filename it's uploaded under, eg.
+    "EMSR900_AOI01_DEL_PRODUCT_v1.gpkg", is not informative to a non-expert
+    user), or the raw filename as a fallback if it doesn't match the expected
+    Copernicus EMS naming pattern.
+
+    The real file extension is always kept as a suffix: HDX derives a
+    resource's download filename from its name (not from the uploaded file's
+    own path), so dropping the extension here would give downloaded files
+    the wrong/missing extension.
+
+    Args:
+        path: Path to the extracted resource file
+        resource_prefix: Country/org prefix, eg. "ven_copernicus_ems" for a
+            single-country activation or "copernicus_ems" for a multi-country
+            one (the activation code itself isn't included here - it's
+            already in describe_resource's description text)
+
+    Returns:
+        A resource name/filename, eg.
+        "ven_copernicus_ems_aoi01_delineation_initial.gpkg"
+    """
+    stem = Path(path).stem
+    aoi, product_type, round_token = _parse_product_type(stem)
+    if not product_type:
+        return Path(path).name
+    type_slug = _PRODUCT_TYPE_SLUG[product_type]
+    if Path(path).suffix.lower() in (".zip", ".json"):
+        layer_name = _layer_name(stem, aoi, product_type, round_token)
+    else:
+        layer_name = None
+    layer_part = f"_{_layer_slug(layer_name)}" if layer_name else ""
+    # Some real archives redeliver the same file under the same name with
+    # different content (see module docstring); those get a __dup<n> suffix
+    # at extraction time, which must carry through here too so the two
+    # resources don't end up with identical, indistinguishable names.
+    dup_match = _DUP_SUFFIX_RE.search(stem)
+    dup_part = f"_dup{dup_match.group(1)}" if dup_match else ""
+    return (
+        f"{resource_prefix}_{aoi.lower()}_{type_slug}{layer_part}_"
+        f"{_round_slug(round_token)}{dup_part}{Path(path).suffix.lower()}"
+    )
+
+
 def describe_product_types(paths: list) -> str:
     """Returns a dataset-notes snippet explaining which Copernicus EMS product
     type codes (DEL/GRA/FEP) appear in the given resource paths' filenames.
@@ -174,10 +303,45 @@ def describe_product_types(paths: list) -> str:
         for product_type in ("DEL", "GRA", "FEP")
         if product_type in types_present
     ]
-    return (
+    note = (
         "\n\n**Product types present in this dataset's resources:**  \n"
         + "  \n".join(lines)
     )
+    if any(Path(path).suffix.lower() == ".gpkg" for path in paths):
+        note += (
+            "\n\nWhere a GeoPackage (.gpkg) resource is present, it already "
+            "contains every layer for that Area of Interest/round with its "
+            "official Copernicus styling and colours - prefer it in GIS "
+            "software over individual layer downloads."
+        )
+    return note
+
+
+def find_aoi_boundary_resources(paths: list) -> list:
+    """Returns the subset of paths that are the standalone GeoJSON AOI
+    boundary layer (areaOfInterestA), ordered by AOI number - eg. for
+    choosing a single lightweight, always-meaningful resource to use as the
+    dataset preview, rather than a zipped shapefile bundle or a
+    whole-delivery GeoPackage.
+
+    Args:
+        paths: Resource paths, typically as returned by extract_product_files
+
+    Returns:
+        Matching paths, ordered by AOI number
+    """
+    matches = []
+    for path in paths:
+        if Path(path).suffix.lower() != _GEOJSON_EXT:
+            continue
+        stem = Path(path).stem
+        aoi, product_type, round_token = _parse_product_type(stem)
+        if not aoi:
+            continue
+        if _layer_name(stem, aoi, product_type, round_token) == _AOI_BOUNDARY_LAYER:
+            matches.append((int(aoi[len("AOI") :]), path))
+    matches.sort(key=lambda pair: pair[0])
+    return [path for _, path in matches]
 
 
 def extract_product_files(zip_path: str, output_dir: str) -> list:
@@ -349,19 +513,36 @@ def _materialize_groups(raw_paths: list, output_dir_path: Path) -> list:
     parsed_types = {stem: _parse_product_type(stem) for stem in groups}
 
     aoi_accurate_types = {}
-    for aoi, product_type, _ in parsed_types.values():
-        if aoi and product_type in _MORE_ACCURATE_TYPES:
+    gpkg_available_for = set()
+    for stem, members in groups.items():
+        aoi, product_type, round_token = parsed_types[stem]
+        if not aoi:
+            continue
+        if product_type in _MORE_ACCURATE_TYPES:
             aoi_accurate_types.setdefault(aoi, set()).add(product_type)
+        if ".gpkg" in members:
+            gpkg_available_for.add((aoi, product_type, round_token))
 
     extracted = []
     for stem, members in groups.items():
         if _is_skipped_layer(stem):
             continue
-        aoi, product_type, _ = parsed_types[stem]
+        aoi, product_type, round_token = parsed_types[stem]
         if product_type == "FEP" and aoi_accurate_types.get(aoi):
             logger.info(
                 f"Skipping FEP product {stem!r}: more accurate "
                 f"{'/'.join(sorted(aoi_accurate_types[aoi]))} data available for {aoi}"
+            )
+            continue
+        if (
+            aoi
+            and _SHAPEFILE_EXT in members
+            and (aoi, product_type, round_token) in gpkg_available_for
+            and _layer_name(stem, aoi, product_type, round_token) != _AOI_BOUNDARY_LAYER
+        ):
+            logger.info(
+                f"Skipping per-layer product {stem!r}: GeoPackage already "
+                f"covers {aoi}/{product_type}/{round_token} with styling"
             )
             continue
         if _SHAPEFILE_EXT in members:

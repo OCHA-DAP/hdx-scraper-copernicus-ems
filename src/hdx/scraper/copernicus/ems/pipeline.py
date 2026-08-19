@@ -19,9 +19,31 @@ from hdx.scraper.copernicus.ems.product_extractor import (
     describe_product_types,
     describe_resource,
     extract_product_files,
+    parse_product_type,
+    resource_title,
+    round_sort_key,
 )
 
 logger = logging.getLogger(__name__)
+
+_RESOURCE_EXTENSION_ORDER = {".gpkg": 0, ".xlsx": 1, ".pdf": 3}
+
+
+def _resource_sort_key(path: str):
+    """Sorts resources by AOI number, then chronological delivery round
+    (initial delivery before monitoring round 1 before round 2, etc), then by
+    file-extension category within a round (GeoPackage/spreadsheet first,
+    PDF map last) - so the list reads as the event's timeline rather than an
+    arbitrary alphabetical-by-extension order. Resources whose filename
+    doesn't match the expected Copernicus EMS naming pattern sort last."""
+    aoi, _, round_token = parse_product_type(path)
+    if aoi:
+        aoi_number = int(aoi[len("AOI") :])
+        round_rank = round_sort_key(round_token)
+    else:
+        aoi_number = round_rank = float("inf")
+    extension_rank = _RESOURCE_EXTENSION_ORDER.get(Path(path).suffix.lower(), 2)
+    return (aoi_number, round_rank, extension_rank, path)
 
 
 @lru_cache
@@ -97,9 +119,11 @@ class Pipeline:
         if len(matched_countries) == 1:
             location_prefix = matched_countries[0][0]
             name_prefix = matched_iso3s[0].lower()
+            resource_prefix = f"{name_prefix}_copernicus_ems"
         else:
             location_prefix = "Multi-country"
             name_prefix = "multi-country"
+            resource_prefix = "copernicus_ems"
 
         activation_name = detail.get("name", code)
         # Copernicus activation names are typically "<event type> in <country>", which
@@ -129,8 +153,8 @@ class Pipeline:
             else ""
         )
         dataset["notes"] = (
-            f"**Copernicus EMS activation code: {code}**  "
-            f"{detail.get('reason', '')}{gdacs_note}{citation_note}"
+            f"This dataset contains Copernicus EMS Rapid Mapping products for "
+            f"activation {code}. {detail.get('reason', '')}{gdacs_note}{citation_note}"
         )
 
         category_tags = list(self._tag_mapping.get(category, []))
@@ -167,15 +191,16 @@ class Pipeline:
 
         dataset["notes"] += describe_product_types(extracted_paths)
 
-        resource_order = {".gpkg": 0, ".xlsx": 1, ".pdf": 3}
-        for path in sorted(
-            extracted_paths,
-            key=lambda p: (resource_order.get(Path(p).suffix.lower(), 2), p),
-        ):
-            resource_name = basename(path)
+        for path in sorted(extracted_paths, key=_resource_sort_key):
+            raw_name = basename(path)
             resource = Resource(
                 {
-                    "name": resource_name,
+                    # The raw Copernicus EMS filename (raw_name) is cryptic to
+                    # a non-expert user, so a descriptive name following HDX's
+                    # resource-naming convention is used instead - the actual
+                    # uploaded/downloaded file still keeps its original
+                    # filename on disk regardless of this "name" field.
+                    "name": resource_title(path, resource_prefix),
                     "description": describe_resource(path, code, activation_name),
                 }
             )
@@ -194,16 +219,20 @@ class Pipeline:
                 else:
                     resource.set_file_to_upload(path, guess_format_from_suffix=True)
             except HDXError:
-                logger.warning(
-                    f"{code}: couldn't map format for {resource_name}, skipping"
-                )
+                logger.warning(f"{code}: couldn't map format for {raw_name}, skipping")
                 continue
             dataset.add_update_resource(resource)
 
-        showcase = None
+        # TODO: HDX's default single-resource preview would show one
+        # arbitrary, unstyled layer out of this multi-layer package, which
+        # misrepresents the data - disabled for now rather than defaulting
+        # to that.
+        dataset.preview_off()
+
+        showcases = []
         report_link = detail.get("reportLink")
         if report_link:
-            showcase = Showcase(
+            report_showcase = Showcase(
                 {
                     "name": f"{name}-showcase",
                     "title": f"{activation_name} Situational Report",
@@ -213,6 +242,27 @@ class Pipeline:
                 }
             )
             if tags:
-                showcase.add_tags(tags)
+                report_showcase.add_tags(tags)
+            showcases.append(report_showcase)
 
-        return dataset, showcase
+        # Copernicus's own viewer has proper legends/colours/timelines that
+        # this pipeline doesn't attempt to reproduce - link to it via a
+        # showcase button rather than Dataset.set_custom_viz: HDX embeds
+        # set_custom_viz's URL in an iframe, and the viewer's
+        # Content-Security-Policy (frame-ancestors 'none', set by EU
+        # Commission policy - not something Copernicus can change) refuses to
+        # be framed by any other origin, so that iframe never renders.
+        viewer_showcase = Showcase(
+            {
+                "name": f"{name}-viewer-showcase",
+                "title": f"{activation_name} Interactive Viewer",
+                "notes": "Click to open the Copernicus EMS interactive map viewer for this activation in full screen",
+                "url": f"https://mapping.emergency.copernicus.eu/activations/{code}/",
+                "image_url": "https://cems-mapping-website.s3.amazonaws.com/media/images/cems-orange-logo.2e16d0ba.fill-768x432.png",
+            }
+        )
+        if tags:
+            viewer_showcase.add_tags(tags)
+        showcases.append(viewer_showcase)
+
+        return dataset, showcases
