@@ -6,14 +6,19 @@
 This script reads the Copernicus Emergency Management Service (EMS) Rapid Mapping RSS
 feed (`https://mapping.emergency.copernicus.eu/latest/feed/`) to discover new EMSR
 activation codes, fetches per-activation detail from the EMS JSON API, and publishes
-one HDX dataset per activation with the activation's full products archive as a
-resource and a link to its StoryMap as a showcase.
+one HDX dataset per activation with one `Link` resource per available product/format
+combination (vector data, GeoPackage, PDF map, summary table) pointing straight at
+Copernicus's own servers, plus showcases linking to the activation's StoryMap and to
+Copernicus's own interactive viewer.
 
 There is no confirmed endpoint to list all activations, so the RSS feed (a small
 rolling window of recent items) is the only discovery mechanism - this is a known
 limitation, not a bug. Runs are incremental, tracked via `HDXState` against a
 `pipeline-state-copernicus-ems` HDX dataset, which must exist before the first run
 (see Deployment below).
+
+See `docs/plans/2026-07-14-hdxpipe-142-initial-build.md` for the full scoping/design
+rationale, and `docs/plans/`/`docs/decisions/` for everything since.
 
 ## Development
 

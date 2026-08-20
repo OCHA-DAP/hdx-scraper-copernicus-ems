@@ -68,7 +68,7 @@ def main(
             api_retriever = APIRetriever(configuration, retriever)
             activations = api_retriever.process(new_codes)
 
-            pipeline = Pipeline(configuration, activations, tempdir)
+            pipeline = Pipeline(configuration, activations)
             for dataset, showcases in pipeline.generate_datasets():
                 dataset.update_from_yaml(
                     script_dir_plus_file(

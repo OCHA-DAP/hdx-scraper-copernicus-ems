@@ -3,8 +3,6 @@
 
 import logging
 from functools import lru_cache
-from os.path import basename, join
-from pathlib import Path
 
 from hdx.api.configuration import Configuration
 from hdx.data.dataset import Dataset
@@ -15,35 +13,16 @@ from hdx.location.country import Country
 from hdx.utilities.dateparse import parse_date
 from slugify import slugify
 
-from hdx.scraper.copernicus.ems.product_extractor import (
+from hdx.scraper.copernicus.ems.product_links import (
     describe_product_types,
     describe_resource,
-    extract_product_files,
-    parse_product_type,
+    resource_format,
+    resource_sort_key,
     resource_title,
-    round_sort_key,
+    select_products,
 )
 
 logger = logging.getLogger(__name__)
-
-_RESOURCE_EXTENSION_ORDER = {".gpkg": 0, ".xlsx": 1, ".pdf": 3}
-
-
-def _resource_sort_key(path: str):
-    """Sorts resources by AOI number, then chronological delivery round
-    (initial delivery before monitoring round 1 before round 2, etc), then by
-    file-extension category within a round (GeoPackage/spreadsheet first,
-    PDF map last) - so the list reads as the event's timeline rather than an
-    arbitrary alphabetical-by-extension order. Resources whose filename
-    doesn't match the expected Copernicus EMS naming pattern sort last."""
-    aoi, _, round_token = parse_product_type(path)
-    if aoi:
-        aoi_number = int(aoi[len("AOI") :])
-        round_rank = round_sort_key(round_token)
-    else:
-        aoi_number = round_rank = float("inf")
-    extension_rank = _RESOURCE_EXTENSION_ORDER.get(Path(path).suffix.lower(), 2)
-    return (aoi_number, round_rank, extension_rank, path)
 
 
 @lru_cache
@@ -68,9 +47,8 @@ def _latest_delivery_time(detail: dict):
 
 
 class Pipeline:
-    def __init__(self, configuration: Configuration, activations: dict, temp_dir: str):
+    def __init__(self, configuration: Configuration, activations: dict):
         self._activations = activations
-        self._temp_dir = temp_dir
         self._tag_mapping = configuration.get("tag_mapping", {})
         self._common_tags = configuration.get("common_tags", [])
         self._unmapped_categories = set()
@@ -89,7 +67,6 @@ class Pipeline:
 
     def _generate_dataset(self, code: str, activation: dict):
         detail = activation["detail"]
-        zip_path = activation["zip_path"]
 
         if detail.get("sensitive"):
             logger.info(f"{code}: sensitive, skipping")
@@ -100,8 +77,9 @@ class Pipeline:
             logger.warning(f"{code}: no countries listed, skipping")
             return None
 
-        if not zip_path:
-            logger.warning(f"{code}: no products archive downloaded, skipping")
+        products = select_products(detail.get("aois") or [])
+        if not products:
+            logger.warning(f"{code}: no downloadable products, skipping")
             return None
 
         matched_countries = []
@@ -182,51 +160,35 @@ class Pipeline:
             end_date = _latest_delivery_time(detail) or start_date
             dataset.set_time_period(start_date, end_date)
 
-        extracted_paths = extract_product_files(zip_path, join(self._temp_dir, code))
-        if not extracted_paths:
-            logger.warning(
-                f"{code}: no files extracted from products archive, skipping"
-            )
-            return None
+        dataset["notes"] += describe_product_types(products)
 
-        dataset["notes"] += describe_product_types(extracted_paths)
-
-        for path in sorted(extracted_paths, key=_resource_sort_key):
-            raw_name = basename(path)
+        resource_specs = sorted(
+            (
+                (product, format_key)
+                for product in products
+                for format_key in product["links"]
+            ),
+            key=lambda spec: resource_sort_key(*spec),
+        )
+        for product, format_key in resource_specs:
             resource = Resource(
                 {
-                    # The raw Copernicus EMS filename (raw_name) is cryptic to
-                    # a non-expert user, so a descriptive name following HDX's
-                    # resource-naming convention is used instead - the actual
-                    # uploaded/downloaded file still keeps its original
-                    # filename on disk regardless of this "name" field.
-                    "name": resource_title(path, resource_prefix),
-                    "description": describe_resource(path, code, activation_name),
+                    # The raw Copernicus EMS filename is cryptic to a
+                    # non-expert user, so a descriptive name following HDX's
+                    # resource-naming convention is used instead.
+                    "name": resource_title(product, format_key, resource_prefix),
+                    "description": describe_resource(
+                        product, format_key, code, activation_name
+                    ),
+                    "url": product["links"][format_key],
                 }
             )
-            ext = Path(path).suffix.lower()
-            try:
-                if ext == ".json":
-                    # Plain ".json" only maps to a generic "JSON" HDX format, but
-                    # these are GeoJSON feature collections.
-                    resource.set_file_to_upload(path)
-                    resource.set_format("geojson")
-                elif ext == ".zip":
-                    # The only zips this pipeline creates are per-layer shapefile
-                    # component bundles; ".zip" itself has no format mapping.
-                    resource.set_file_to_upload(path)
-                    resource.set_format("shp")
-                else:
-                    resource.set_file_to_upload(path, guess_format_from_suffix=True)
-            except HDXError:
-                logger.warning(f"{code}: couldn't map format for {raw_name}, skipping")
-                continue
+            resource.set_format(resource_format(format_key))
             dataset.add_update_resource(resource)
 
-        # TODO: HDX's default single-resource preview would show one
-        # arbitrary, unstyled layer out of this multi-layer package, which
-        # misrepresents the data - disabled for now rather than defaulting
-        # to that.
+        # Every resource is a link to Copernicus's own servers (see
+        # api_retriever.py/CLAUDE.md) rather than a file hosted by HDX, so
+        # there's nothing HDX could preview locally.
         dataset.preview_off()
 
         showcases = []
