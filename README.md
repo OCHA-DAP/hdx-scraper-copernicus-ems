@@ -17,8 +17,7 @@ limitation, not a bug. Runs are incremental, tracked via `HDXState` against a
 `pipeline-state-copernicus-ems` HDX dataset, which must exist before the first run
 (see Deployment below).
 
-See `docs/plans/2026-07-14-hdxpipe-142-initial-build.md` for the full scoping/design
-rationale, and `docs/plans/`/`docs/decisions/` for everything since.
+See `docs/decisions/` and `CLAUDE.md` for the scoping/design rationale.
 
 ## Development
 

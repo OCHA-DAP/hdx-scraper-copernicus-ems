@@ -177,6 +177,5 @@ intent of the fix and complicate review and blame.
 
 ## Decision Records
 
-Non-trivial design decisions are recorded in `docs/decisions/` (see `docs/decisions/README.md`).
-Every plan-mode session for this repo — the initial pipeline build and every later bug fix, feature
-request, or partner-feedback response — is recorded in `docs/plans/` (see `docs/plans/README.md`).
+Non-trivial design decisions are recorded in `docs/decisions/` (see `docs/decisions/README.md`) —
+the distilled decision, not the full planning narrative, belongs here.

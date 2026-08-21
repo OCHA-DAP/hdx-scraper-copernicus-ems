@@ -37,9 +37,8 @@ Retires almost all of `product_extractor.py` (renamed `product_links.py`) —
 zip flattening, shapefile-sibling bundling, per-layer explosion,
 GeoPackage-supersedes-layers logic, and duplicate-entry disambiguation all
 become unnecessary once nothing is downloaded or unpacked; a prior bug fix
-targeting that same zip-flattening/dedup logic (2026-08-12, see
-`docs/plans/2026-08-12-fix-grm-fixture-and-shapefile-dedup-bug.md`) is now
-moot. `api_retriever.py`'s existence probe deliberately bypasses
+(2026-08-12) targeting that same zip-flattening/dedup logic is now moot.
+`api_retriever.py`'s existence probe deliberately bypasses
 `Retrieve`'s save/fixture replay layer, since that layer has no notion of
 "does this exist" — tests instead monkeypatch the probe function itself.
 One older activation (`EMSR838`) behaves inconsistently with `?type=`
