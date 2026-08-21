@@ -111,7 +111,7 @@ class TestPipeline:
         )
         showcase_urls = {s["url"] for s in showcases}
         assert (
-            "https://storymaps.arcgis.com/stories/717d0c07ec434b54ab6b2e0bbd7bc9f6"
+            "https://mapping.emergency.copernicus.eu/activations/EMSR884/reporting/"
             in showcase_urls
         )
         assert (

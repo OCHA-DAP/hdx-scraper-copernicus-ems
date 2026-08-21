@@ -198,8 +198,8 @@ class Pipeline:
                 {
                     "name": f"{name}-showcase",
                     "title": f"{activation_name} Situational Report",
-                    "notes": "Click to explore the Copernicus EMS StoryMap for this activation",
-                    "url": report_link,
+                    "notes": "Click to explore the Copernicus EMS situational reporting for this activation",
+                    "url": f"https://mapping.emergency.copernicus.eu/activations/{code}/reporting/",
                     "image_url": "https://mapping.emergency.copernicus.eu/static/assets/ccl/images/ccl-icon-emergency.svg",
                 }
             )
@@ -207,13 +207,8 @@ class Pipeline:
                 report_showcase.add_tags(tags)
             showcases.append(report_showcase)
 
-        # Copernicus's own viewer has proper legends/colours/timelines that
-        # this pipeline doesn't attempt to reproduce - link to it via a
-        # showcase button rather than Dataset.set_custom_viz: HDX embeds
-        # set_custom_viz's URL in an iframe, and the viewer's
-        # Content-Security-Policy (frame-ancestors 'none', set by EU
-        # Commission policy - not something Copernicus can change) refuses to
-        # be framed by any other origin, so that iframe never renders.
+        # Showcase link, not Dataset.set_custom_viz's iframe embed - the
+        # viewer's CSP blocks framing by any other origin (see ADR 0002).
         viewer_showcase = Showcase(
             {
                 "name": f"{name}-viewer-showcase",
