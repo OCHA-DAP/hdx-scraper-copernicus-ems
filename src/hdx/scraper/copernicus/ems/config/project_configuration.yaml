@@ -1,0 +1,17 @@
+# Collector specific configuration
+
+feed_url: "https://mapping.emergency.copernicus.eu/latest/feed/"
+detail_base_url: "https://rapidmapping.emergency.copernicus.eu/backend/dashboard-api/public-activations/"
+
+# Applied to every activation regardless of category. Confirmed against the
+# live HDX tag vocabulary (tag_autocomplete) - "natural disasters" (plural)
+# and "hazards and risk" are the approved strings.
+common_tags: ["natural disasters", "hazards and risk"]
+
+# Provisional: category -> HDX tags. Only covers categories observed in real feed/API
+# samples so far. Not yet confirmed against the approved HDX vocabulary by DPT
+# (open question from pipeline scoping) - revisit once the metadata form is done.
+tag_mapping:
+  Earthquake: ["earthquake-tsunami", "geodata"]
+  Flood: ["flooding", "geodata"]
+  Wildfire: ["fire", "geodata"]

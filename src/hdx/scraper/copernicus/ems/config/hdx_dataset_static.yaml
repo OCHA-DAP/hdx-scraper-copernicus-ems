@@ -1,0 +1,10 @@
+license_id: cc-by
+methodology: Other
+methodology_other: More information can be found [here](https://mapping.emergency.copernicus.eu/about/using-of-earth-observation-data/).
+caveats: Data sourced from [Copernicus Emergency Management Service (EMS) Rapid Mapping](https://mapping.emergency.copernicus.eu). See individual activation for licensing/usage terms. Please cite in line with the [Copernicus EMS citation guidelines](https://mapping.emergency.copernicus.eu/about/citation-guidelines/).
+dataset_source: Copernicus
+package_creator: HDX Data Systems Team
+private: False
+maintainer: 196196be-6037-4488-8b71-d786adf4c081
+owner_org:  47677055-92e2-4f68-bf1b-5d570f27e791
+data_update_frequency: -2
