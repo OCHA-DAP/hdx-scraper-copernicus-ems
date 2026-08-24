@@ -5,11 +5,11 @@ direct per-format download links (see product_links.py) actually exist on
 Copernicus's own backend for each product.
 
 Resources are linked straight to Copernicus's servers rather than downloaded
-and re-hosted on HDX, at Copernicus's own request (so they can track download
-statistics) - see CLAUDE.md. Appending `?type=<format>` to a product's
-`downloadPath` redirects to a specific per-format file, but not every product
-has every format (eg. a monitoring-round update may ship only a map), and
-this can't be predicted from other API fields - it has to be probed."""
+and re-hosted on HDX, at Copernicus's own request. Appending `?type=<format>`
+to a product's `downloadPath` redirects to a specific per-format file, but
+not every product has every format (eg. a monitoring-round update may ship
+only a map), and this can't be predicted from other API fields - it has to
+be probed."""
 
 import logging
 
@@ -19,9 +19,6 @@ from hdx.utilities.retriever import Retrieve
 
 logger = logging.getLogger(__name__)
 
-# Confirmed against the live backend: "geopackage" (as literally given by
-# Copernicus) silently falls back to the combined bundle rather than the
-# standalone GeoPackage - the working query value is "gpkg".
 _FORMAT_QUERY_VALUES = ("vectors", "gpkg", "pdf", "xlsx")
 
 

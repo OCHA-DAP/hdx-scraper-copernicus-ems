@@ -173,9 +173,6 @@ class Pipeline:
         for product, format_key in resource_specs:
             resource = Resource(
                 {
-                    # The raw Copernicus EMS filename is cryptic to a
-                    # non-expert user, so a descriptive name following HDX's
-                    # resource-naming convention is used instead.
                     "name": resource_title(product, format_key, resource_prefix),
                     "description": describe_resource(
                         product, format_key, code, activation_name
@@ -186,9 +183,6 @@ class Pipeline:
             resource.set_format(resource_format(format_key))
             dataset.add_update_resource(resource)
 
-        # Every resource is a link to Copernicus's own servers (see
-        # api_retriever.py/CLAUDE.md) rather than a file hosted by HDX, so
-        # there's nothing HDX could preview locally.
         dataset.preview_off()
 
         showcases = []
@@ -207,8 +201,7 @@ class Pipeline:
                 report_showcase.add_tags(tags)
             showcases.append(report_showcase)
 
-        # Showcase link, not Dataset.set_custom_viz's iframe embed - the
-        # viewer's CSP blocks framing by any other origin (see ADR 0002).
+        # Showcase link, not Dataset.set_custom_viz's iframe embed which doesn't work
         viewer_showcase = Showcase(
             {
                 "name": f"{name}-viewer-showcase",
