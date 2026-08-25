@@ -13,9 +13,10 @@ Copernicus's own interactive viewer.
 
 There is no confirmed endpoint to list all activations, so the RSS feed (a small
 rolling window of recent items) is the only discovery mechanism - this is a known
-limitation, not a bug. Runs are incremental, tracked via `HDXState` against a
-`pipeline-state-copernicus-ems` HDX dataset, which must exist before the first run
-(see Deployment below).
+limitation, not a bug. Every run rechecks every activation currently in that window
+(not just ones new since the last run) and republishes it - there is no persisted
+state between runs. See `docs/decisions/0005-full-window-rescan-no-persisted-state.md`
+for why.
 
 See `docs/decisions/` and `CLAUDE.md` for the scoping/design rationale.
 
@@ -113,12 +114,6 @@ To run the tests and view coverage, execute:
 ```
 
 ## Deployment
-
-Before the first production run, an HDX dataset named `pipeline-state-copernicus-ems`
-must exist with a single small text resource - `HDXState` reads/writes the
-last-processed feed date to it and will error on `Dataset.read_from_hdx` if it doesn't
-exist yet. This mirrors the bootstrap step used by other incrementally-tracked HDX
-pipelines (e.g. `hdx-scraper-sentinelasia`).
 
 **Note:** `dataset_maintainer`, `license_id`, `caveats`, and `notes` in
 `config/hdx_dataset_static.yaml` are provisional placeholders pending confirmation

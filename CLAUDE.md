@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this pipeline does
 
 Reads the Copernicus Emergency Management Service (EMS) Rapid Mapping RSS feed
-(`https://mapping.emergency.copernicus.eu/latest/feed/`) to discover new EMSR activation
+(`https://mapping.emergency.copernicus.eu/latest/feed/`) to discover EMSR activation
 codes, fetches per-activation detail from the EMS JSON API, and publishes one HDX dataset
 per activation with one `Link` resource per available product/format combination
 (vector data, GeoPackage, PDF map, summary table), plus showcases linking to its StoryMap
@@ -20,16 +20,19 @@ There is no confirmed endpoint to list all activations, so the RSS feed (a small
 window of recent items) is the sole discovery mechanism — this is a known limitation, not
 a bug.
 
+**No persisted state between runs:** every run rechecks every activation currently in the
+feed's window, not just ones new since the last run, and republishes all of them
+unconditionally. This was a deliberate choice, not an oversight — see
+`docs/decisions/0005-full-window-rescan-no-persisted-state.md` for why an incremental
+"new since last checkpoint" approach (what an earlier version of this pipeline did, via
+`HDXState`) silently and permanently drops activations.
+
 **Deployment caveat:** `dataset_maintainer`, `license_id`, `caveats`, and `notes` in
 `src/hdx/scraper/copernicus/ems/config/hdx_dataset_static.yaml` are provisional
 placeholders pending confirmation from DPT's Copernicus EMS metadata form — do not treat
 this pipeline as ready for prod until those are corrected. Similarly, `tag_mapping` in
 `project_configuration.yaml` only covers categories observed in real feed/API samples so
 far and is not yet confirmed against the approved HDX tag vocabulary.
-
-**Incremental runs:** `__main__.py` currently always scans from `default_date` — the
-`HDXState`-based incremental tracking against a `pipeline-state-copernicus-ems` HDX
-dataset described in README.md is not wired up yet (see the `TODO` in `main()`).
 
 ## Commands
 
@@ -88,11 +91,10 @@ Adding a dependency: add it to `project.dependencies` in `pyproject.toml` (or
 The pipeline is a straight-line pipe from feed → API → HDX, orchestrated by
 `__main__.py:main()`:
 
-1. **`feed_reader.FeedReader`** — downloads the RSS feed, extracts `EMSR\d+` codes from
-   entries published after `previous_build_date` via regex against
-   `f"{title} {description} {link}"` (the feed has no dedicated code field), and returns
-   `(last_build_date, new_codes)`.
-2. **`api_retriever.APIRetriever`** — for each new code, calls the detail JSON API, then for
+1. **`feed_reader.FeedReader`** — downloads the RSS feed and extracts `EMSR\d+` codes via
+   regex against `f"{title} {description} {link}"` for every entry (the feed has no
+   dedicated code field), returning every code currently in the feed's window.
+2. **`api_retriever.APIRetriever`** — for each code, calls the detail JSON API, then for
    every product entry in `detail["aois"][].products[]` that has a `downloadPath`, probes
    `f"{downloadPath}?type={format}"` for `format` in `vectors`/`gpkg`/`pdf`/`xlsx` and
    attaches only the ones that resolve as `product["links"]`. This can't be shortcut from
@@ -137,8 +139,12 @@ The pipeline is a straight-line pipe from feed → API → HDX, orchestrated by
 against multiple real, recently-published activations, but was found to be unreliable for
 at least one older activation (`?type=vectors`/`xlsx` 404'd even though the plain combined
 zip at the same `downloadPath`, with no `?type=`, contained those exact files). Since this
-pipeline only ever processes newly-discovered activations from the RSS feed, this is an
-accepted limitation rather than something worked around.
+pipeline only ever processes activations still in the RSS feed's small rolling window
+(recently requested or recently updated), this is an accepted limitation rather than
+something worked around — and since every run rechecks the whole window (see
+`docs/decisions/0005-full-window-rescan-no-persisted-state.md`), a transient probe failure
+for one activation on one run isn't permanent - it gets retried on the next run for as long
+as the activation stays in the window.
 
 Tests mirror this structure 1:1 (`tests/test_<module>.py`) and drive real fixture data
 (`tests/fixtures/input/`, sourced from actual Copernicus EMS feed/API responses) through

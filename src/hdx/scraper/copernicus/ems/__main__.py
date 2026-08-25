@@ -9,10 +9,8 @@ import logging
 from os.path import expanduser, join
 
 from hdx.api.configuration import Configuration
-from hdx.api.utilities.hdx_state import HDXState
 from hdx.data.user import User
 from hdx.facades.infer_arguments import facade
-from hdx.utilities.dateparse import iso_string_from_datetime, parse_date
 from hdx.utilities.downloader import Download
 from hdx.utilities.path import (
     script_dir_plus_file,
@@ -51,48 +49,37 @@ def main(
 
     with wheretostart_tempdir_batch(folder=_LOOKUP) as info:
         tempdir = info["folder"]
-        with HDXState(
-            "pipeline-state-copernicus-ems",
-            tempdir,
-            parse_date,
-            iso_string_from_datetime,
-            configuration,
-        ) as state:
-            previous_build_date = state.get()
-            with Download() as downloader:
-                retriever = Retrieve(
-                    downloader=downloader,
-                    fallback_dir=tempdir,
-                    saved_dir=_SAVED_DATA_DIR,
-                    temp_dir=tempdir,
-                    save=save,
-                    use_saved=use_saved,
-                )
-                feed_reader = FeedReader(configuration, retriever)
-                last_build_date, new_codes = feed_reader.get_new_codes(
-                    previous_build_date
-                )
+        with Download() as downloader:
+            retriever = Retrieve(
+                downloader=downloader,
+                fallback_dir=tempdir,
+                saved_dir=_SAVED_DATA_DIR,
+                temp_dir=tempdir,
+                save=save,
+                use_saved=use_saved,
+            )
+            feed_reader = FeedReader(configuration, retriever)
+            codes = feed_reader.get_codes()
 
-                api_retriever = APIRetriever(configuration, retriever)
-                activations = api_retriever.process(new_codes)
+            api_retriever = APIRetriever(configuration, retriever)
+            activations = api_retriever.process(codes)
 
-                pipeline = Pipeline(configuration, activations)
-                for dataset, showcases in pipeline.generate_datasets():
-                    dataset.update_from_yaml(
-                        script_dir_plus_file(
-                            join("config", "hdx_dataset_static.yaml"), main
-                        )
+            pipeline = Pipeline(configuration, activations)
+            for dataset, showcases in pipeline.generate_datasets():
+                dataset.update_from_yaml(
+                    script_dir_plus_file(
+                        join("config", "hdx_dataset_static.yaml"), main
                     )
-                    dataset.create_in_hdx(
-                        remove_additional_resources=True,
-                        match_resource_order=False,
-                        updated_by_script=_UPDATED_BY_SCRIPT,
-                        batch=info["batch"],
-                    )
-                    for showcase in showcases:
-                        showcase.create_in_hdx()
-                        showcase.add_dataset(dataset)
-            state.set(last_build_date)
+                )
+                dataset.create_in_hdx(
+                    remove_additional_resources=True,
+                    match_resource_order=False,
+                    updated_by_script=_UPDATED_BY_SCRIPT,
+                    batch=info["batch"],
+                )
+                for showcase in showcases:
+                    showcase.create_in_hdx()
+                    showcase.add_dataset(dataset)
 
 
 if __name__ == "__main__":
